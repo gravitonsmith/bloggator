@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"github.com/gravitonsmith/bloggator/internal/database"
 	"html"
 	"io"
+	"log"
 	"net/http"
+	"time"
+
+	"github.com/gravitonsmith/bloggator/internal/database"
 )
 
 type RSSFeed struct {
@@ -139,13 +142,47 @@ func addFeedHandler(s *state, cmd command, user database.User) error {
 }
 
 func aggHandler(s *state, cmd command) error {
-	url := "https://www.wagslane.dev/index.xml"
-	feedData, err := fetchFeed(context.Background(), url)
+	if len(cmd.args) != 1 {
+		return fmt.Errorf("Agg command needs a duration to run")
+	}
+
+	timeBetweenRefresh, err := time.ParseDuration(cmd.args[0])
 	if err != nil {
 		return err
 	}
-	fmt.Println(feedData)
-	return nil
+
+	log.Printf("Collecting feeds every %s", timeBetweenRefresh)
+
+	ticker := time.NewTicker(timeBetweenRefresh)
+	for ; ; <-ticker.C {
+		scrapeFeeds(s)
+	}
+}
+
+func scrapeFeeds(s *state) {
+	feed, err := s.db.GetNextFeed(context.Background())
+	if err != nil {
+		log.Println("No feed to fetch: ", err)
+		return
+	}
+	scrapeFeed(s, feed)
+}
+
+func scrapeFeed(s *state, feed database.Feed) {
+	_, err := s.db.MarkFeedFetched(context.Background(), feed.ID)
+	if err != nil {
+		log.Println("Could not mark feed as fetched: ", err)
+		return
+	}
+	feedData, err := fetchFeed(context.Background(), feed.Url)
+	if err != nil {
+		log.Println("Could not get feed data: ", err)
+		return
+	}
+
+	for _, item := range feedData.Channel.Item {
+		fmt.Printf("Feed Item Title: %s\n", item.Title)
+	}
 }
 
 func fetchFeed(ctx context.Context, feedUrl string) (*RSSFeed, error) {
