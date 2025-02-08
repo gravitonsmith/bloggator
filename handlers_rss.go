@@ -4,13 +4,10 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"github.com/gravitonsmith/bloggator/internal/database"
 	"html"
 	"io"
 	"net/http"
-	"time"
-
-	"github.com/google/uuid"
-	"github.com/gravitonsmith/bloggator/internal/database"
 )
 
 type RSSFeed struct {
@@ -29,6 +26,58 @@ type RSSItem struct {
 	PubDate     string `xml:"pubDate"`
 }
 
+func currentUserFeeds(s *state, cmd command) error {
+	if len(cmd.args) != 0 {
+		return fmt.Errorf("Following command does not have the correct number of args")
+	}
+
+	user, err := s.db.GetUser(context.Background(), s.config.CurrentUser)
+	if err != nil {
+		return err
+	}
+
+	feeds, err := s.db.GetFeedsByUser(context.Background(), user.ID)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Break it down for me:\n")
+	fmt.Printf("User: %s\n", feeds[0].UserName)
+	for _, feed := range feeds {
+		fmt.Printf("Feed name: %s\n", feed.FeedName)
+	}
+
+	return nil
+}
+
+func followFeedHandler(s *state, cmd command) error {
+	if len(cmd.args) != 1 {
+		return fmt.Errorf("Follow command does not have the correct number of args")
+	}
+
+	user, err := s.db.GetUser(context.Background(), s.config.CurrentUser)
+	if err != nil {
+		return err
+	}
+	feed, err := s.db.GetFeedbyUrl(context.Background(), cmd.args[0])
+	if err != nil {
+		return err
+	}
+
+	args := database.CreateFeedFollowParams{
+		UserID: user.ID,
+		FeedID: feed.ID,
+	}
+
+	follow, err := s.db.CreateFeedFollow(context.Background(), args)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Follow created!\nFeed name: %s\n User name: %s\n", follow.FeedName, follow.UserName)
+	return nil
+}
+
 func getAllFeedsHandler(s *state, cmd command) error {
 	if len(cmd.args) != 0 {
 		return fmt.Errorf("Too many arguments added to feeds command")
@@ -40,7 +89,11 @@ func getAllFeedsHandler(s *state, cmd command) error {
 
 	fmt.Println("Here are all stored feeds")
 	for _, feed := range feeds {
-		fmt.Printf("Feed name: %s\nURL: %s\nUser name: %s\n", feed.Name, feed.Url, feed.UserName)
+		user, err := s.db.GetUserById(context.Background(), feed.UserID)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Feed name: %s\nURL: %s\nUser name: %s\n", feed.Name, feed.Url, user.Name)
 	}
 	return nil
 }
@@ -58,12 +111,9 @@ func addFeedHandler(s *state, cmd command) error {
 		return err
 	}
 	params := database.CreateFeedParams{
-		ID:        uuid.New(),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-		Name:      name,
-		Url:       url,
-		UserID:    user.ID,
+		Name:   name,
+		Url:    url,
+		UserID: user.ID,
 	}
 
 	feed, err := s.db.CreateFeed(context.Background(), params)
@@ -71,7 +121,12 @@ func addFeedHandler(s *state, cmd command) error {
 		return err
 	}
 
-	fmt.Println(feed)
+	args := database.CreateFeedFollowParams{
+		UserID: user.ID,
+		FeedID: feed.ID,
+	}
+	follow, err := s.db.CreateFeedFollow(context.Background(), args)
+	fmt.Printf("Feed created and followed: %s", follow.FeedName)
 	return nil
 }
 

@@ -7,79 +7,23 @@ package database
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 )
 
-const createFeed = `-- name: CreateFeed :one
-INSERT INTO feed (id, created_at, updated_at, name, url, user_id)
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-		$5,
-		$6
-)
-RETURNING id, created_at, updated_at, name, url, user_id
-`
-
-type CreateFeedParams struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Name      string
-	Url       string
-	UserID    uuid.UUID
-}
-
-func (q *Queries) CreateFeed(ctx context.Context, arg CreateFeedParams) (Feed, error) {
-	row := q.db.QueryRowContext(ctx, createFeed,
-		arg.ID,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-		arg.Name,
-		arg.Url,
-		arg.UserID,
-	)
-	var i Feed
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Name,
-		&i.Url,
-		&i.UserID,
-	)
-	return i, err
-}
-
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, created_at, updated_at, name)
 VALUES (
-    $1,
-    $2,
-    $3,
-    $4
+	gen_random_uuid(),
+	NOW(),
+	NOW(),
+	$1
 )
 RETURNING id, created_at, updated_at, name
 `
 
-type CreateUserParams struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Name      string
-}
-
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, createUser,
-		arg.ID,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-		arg.Name,
-	)
+func (q *Queries) CreateUser(ctx context.Context, name string) (User, error) {
+	row := q.db.QueryRowContext(ctx, createUser, name)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -99,59 +43,28 @@ func (q *Queries) DeleteUser(ctx context.Context) error {
 	return err
 }
 
-const getFeeds = `-- name: GetFeeds :many
-SELECT feed.id, feed.created_at, feed.updated_at, feed.name, feed.url, feed.user_id, users.name AS user_name
-FROM feed
-JOIN users ON feed.user_id = users.id
-`
-
-type GetFeedsRow struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Name      string
-	Url       string
-	UserID    uuid.UUID
-	UserName  string
-}
-
-func (q *Queries) GetFeeds(ctx context.Context) ([]GetFeedsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getFeeds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetFeedsRow
-	for rows.Next() {
-		var i GetFeedsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Name,
-			&i.Url,
-			&i.UserID,
-			&i.UserName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getUser = `-- name: GetUser :one
 SELECT id, created_at, updated_at, name FROM users WHERE name = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, name string) (User, error) {
 	row := q.db.QueryRowContext(ctx, getUser, name)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+	)
+	return i, err
+}
+
+const getUserById = `-- name: GetUserById :one
+SELECT id, created_at, updated_at, name FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserById(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserById, id)
 	var i User
 	err := row.Scan(
 		&i.ID,

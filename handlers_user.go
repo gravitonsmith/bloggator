@@ -5,10 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"time"
-
-	"github.com/google/uuid"
-	"github.com/gravitonsmith/bloggator/internal/database"
 )
 
 func usersHandler(s *state, cmd command) error {
@@ -44,14 +40,7 @@ func registerHandler(s *state, cmd command) error {
 		return err
 	}
 
-	args := database.CreateUserParams{
-		ID:        uuid.New(),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-		Name:      name,
-	}
-
-	user, err := s.db.CreateUser(context.Background(), args)
+	user, err := s.db.CreateUser(context.Background(), name)
 	if err != nil {
 		return err
 	}
