@@ -26,14 +26,30 @@ type RSSItem struct {
 	PubDate     string `xml:"pubDate"`
 }
 
-func currentUserFeeds(s *state, cmd command) error {
-	if len(cmd.args) != 0 {
-		return fmt.Errorf("Following command does not have the correct number of args")
+func deleteFeedFollow(s *state, cmd command, user database.User) error {
+	if len(cmd.args) != 1 {
+		return fmt.Errorf("Unfollow command does not have the correct number of args")
 	}
 
-	user, err := s.db.GetUser(context.Background(), s.config.CurrentUser)
+	feed, err := s.db.GetFeedbyUrl(context.Background(), cmd.args[0])
 	if err != nil {
 		return err
+	}
+
+	args := database.DeleteFollowByUserParams{
+		UserID: user.ID,
+		FeedID: feed.ID,
+	}
+
+	if err = s.db.DeleteFollowByUser(context.Background(), args); err != nil {
+		return err
+	}
+	return nil
+}
+
+func currentUserFeeds(s *state, cmd command, user database.User) error {
+	if len(cmd.args) != 0 {
+		return fmt.Errorf("Following command does not have the correct number of args")
 	}
 
 	feeds, err := s.db.GetFeedsByUser(context.Background(), user.ID)
@@ -42,7 +58,7 @@ func currentUserFeeds(s *state, cmd command) error {
 	}
 
 	fmt.Printf("Break it down for me:\n")
-	fmt.Printf("User: %s\n", feeds[0].UserName)
+	fmt.Printf("User: %s\n", user.Name)
 	for _, feed := range feeds {
 		fmt.Printf("Feed name: %s\n", feed.FeedName)
 	}
@@ -50,15 +66,11 @@ func currentUserFeeds(s *state, cmd command) error {
 	return nil
 }
 
-func followFeedHandler(s *state, cmd command) error {
+func followFeedHandler(s *state, cmd command, user database.User) error {
 	if len(cmd.args) != 1 {
 		return fmt.Errorf("Follow command does not have the correct number of args")
 	}
 
-	user, err := s.db.GetUser(context.Background(), s.config.CurrentUser)
-	if err != nil {
-		return err
-	}
 	feed, err := s.db.GetFeedbyUrl(context.Background(), cmd.args[0])
 	if err != nil {
 		return err
@@ -78,7 +90,7 @@ func followFeedHandler(s *state, cmd command) error {
 	return nil
 }
 
-func getAllFeedsHandler(s *state, cmd command) error {
+func getAllFeedsHandler(s *state, cmd command, user database.User) error {
 	if len(cmd.args) != 0 {
 		return fmt.Errorf("Too many arguments added to feeds command")
 	}
@@ -98,18 +110,14 @@ func getAllFeedsHandler(s *state, cmd command) error {
 	return nil
 }
 
-func addFeedHandler(s *state, cmd command) error {
+func addFeedHandler(s *state, cmd command, user database.User) error {
 	if len(cmd.args) != 2 {
 		return fmt.Errorf("Add command does not have the correct number of args")
 	}
+
 	name := cmd.args[0]
 	url := cmd.args[1]
-	currentUser := s.config.CurrentUser
 
-	user, err := s.db.GetUser(context.Background(), currentUser)
-	if err != nil {
-		return err
-	}
 	params := database.CreateFeedParams{
 		Name:   name,
 		Url:    url,

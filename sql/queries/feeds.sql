@@ -43,3 +43,7 @@ from feed_follows ff
 inner join users u on u.id = ff.user_id
 inner join feeds f on f.id = ff.feed_id
 where ff.user_id = $1;
+
+-- name: DeleteFollowByUser :exec
+delete from feed_follows 
+where user_id = $1 and feed_id = $2;

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -40,6 +41,19 @@ func (c *commands) run(s *state, cmd command) error {
 	return nil
 }
 
+func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
+	return func(s *state, cmd command) error {
+		user, err := s.db.GetUser(context.Background(), s.config.CurrentUser)
+		if err != nil {
+			return err
+		}
+		if err := handler(s, cmd, user); err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
 func main() {
 	cfg, err := config.Read()
 	if err != nil {
@@ -64,10 +78,11 @@ func main() {
 	cmds.register("reset", resetHandler)
 	cmds.register("users", usersHandler)
 	cmds.register("agg", aggHandler)
-	cmds.register("addfeed", addFeedHandler)
-	cmds.register("feeds", getAllFeedsHandler)
-	cmds.register("follow", followFeedHandler)
-	cmds.register("following", currentUserFeeds)
+	cmds.register("addfeed", middlewareLoggedIn(addFeedHandler))
+	cmds.register("feeds", middlewareLoggedIn(getAllFeedsHandler))
+	cmds.register("follow", middlewareLoggedIn(followFeedHandler))
+	cmds.register("following", middlewareLoggedIn(currentUserFeeds))
+	cmds.register("unfollow", middlewareLoggedIn(deleteFeedFollow))
 
 	args := os.Args
 	if len(args) < 2 {
