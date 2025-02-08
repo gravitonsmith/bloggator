@@ -1,31 +1,24 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
 
 	"github.com/gravitonsmith/bloggator/internal/config"
+	"github.com/gravitonsmith/bloggator/internal/database"
+	_ "github.com/lib/pq"
 )
 
 type state struct {
+	db     *database.Queries
 	config *config.Config
 }
 
 type command struct {
 	name string
 	args []string
-}
-
-func loginHandler(s *state, cmd command) error {
-	if len(cmd.args) == 0 {
-		return fmt.Errorf("No arguments were found for login")
-	}
-	if err := s.config.SetUser(cmd.args[0]); err != nil {
-		return err
-	}
-	fmt.Printf("User has been set to %s\n", cmd.args[0])
-	return nil
 }
 
 type commands struct {
@@ -53,10 +46,26 @@ func main() {
 		log.Fatalf("Error with reading json file: %v", err)
 	}
 
-	s := &state{config: &cfg}
+	db, err := sql.Open("postgres", cfg.DBURL)
+	if err != nil {
+		log.Fatalf("Error opening db connection: %v\n", err)
+	}
+
+	dbQueries := database.New(db)
+
+	s := &state{
+		db:     dbQueries,
+		config: &cfg,
+	}
 	cmds := commands{make(map[string]func(*state, command) error)}
 
 	cmds.register("login", loginHandler)
+	cmds.register("register", registerHandler)
+	cmds.register("reset", resetHandler)
+	cmds.register("users", usersHandler)
+	cmds.register("agg", aggHandler)
+	cmds.register("addfeed", addFeedHandler)
+	cmds.register("feeds", getAllFeedsHandler)
 
 	args := os.Args
 	if len(args) < 2 {
