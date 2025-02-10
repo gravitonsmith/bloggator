@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/xml"
 	"fmt"
 	"html"
 	"io"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gravitonsmith/bloggator/internal/database"
@@ -27,6 +30,34 @@ type RSSItem struct {
 	Link        string `xml:"link"`
 	Description string `xml:"description"`
 	PubDate     string `xml:"pubDate"`
+}
+
+func browseHandler(s *state, cmd command, user database.User) error {
+	limit := 2
+	if len(cmd.args) == 1 {
+		if userLimit, err := strconv.Atoi(cmd.args[0]); err == nil {
+			limit = userLimit
+		}
+	}
+
+	arg := database.GetPostsForUserParams{
+		UserID: user.ID,
+		Limit:  int32(limit),
+	}
+
+	posts, err := s.db.GetPostsForUser(context.Background(), arg)
+	if err != nil {
+		return err
+	}
+
+	for _, post := range posts {
+		fmt.Printf("Name: %s Published: %s\n", post.FeedName, post.PublishedAt.Time.Format("Mon Jan 1"))
+		fmt.Printf("******* %s ********\n", post.Title)
+		fmt.Printf("	%v\n", post.Description.String)
+		fmt.Printf("Link to article: %s\n", post.Url)
+		fmt.Println("----------------------------------")
+	}
+	return nil
 }
 
 func deleteFeedFollow(s *state, cmd command, user database.User) error {
@@ -181,7 +212,33 @@ func scrapeFeed(s *state, feed database.Feed) {
 	}
 
 	for _, item := range feedData.Channel.Item {
-		fmt.Printf("Feed Item Title: %s\n", item.Title)
+		published := sql.NullTime{}
+		if t, err := time.Parse(time.RFC1123Z, item.PubDate); err == nil {
+			published = sql.NullTime{
+				Time:  t,
+				Valid: true,
+			}
+		}
+
+		args := database.CreatePostParams{
+			Title: item.Title,
+			Url:   item.Link,
+			Description: sql.NullString{
+				String: item.Description,
+				Valid:  true,
+			},
+			PublishedAt: published,
+			FeedID:      feed.ID,
+		}
+
+		_, err := s.db.CreatePost(context.Background(), args)
+		if err != nil {
+			if strings.Contains(err.Error(), "duplicate key value violates") {
+				continue
+			}
+			log.Println("Erorr occured while saving post: ", err)
+			continue
+		}
 	}
 }
 
