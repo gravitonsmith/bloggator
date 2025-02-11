@@ -21,5 +21,5 @@ Replace the values with your credentials and the username can be whatever you wo
 - `register <username>` - adds a new user to the database
 - `users` - lists all the users in the database
 - `addfeed <name> <url>` - adds a url to be scraped from with a name
-- `agg <time-duration>` - start the aggregator that wil ping on the interval set
-- `browse [limit]` - optional limit woth a default of 2
+- `agg <time-duration>` - start the aggregator that will ping on the interval set
+- `browse [limit]` - optional limit with a default of 2
